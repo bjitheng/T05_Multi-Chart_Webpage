@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Multi-Chart Webpage</title>
+	<style>
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			min-height: 100vh;
+			padding: 2rem;
+			background: #f4f7fb;
+			color: #1f2937;
+			font-family: Arial, sans-serif;
+		}
+
+		h1 {
+			margin: 0 0 1.5rem;
+			text-align: center;
+			color: #12355b;
+		}
+
+		.chart-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 1.5rem;
+			max-width: 1200px;
+			margin: 0 auto;
+		}
+
+		.chart {
+			min-height: 360px;
+			padding: 1rem;
+			background: #ffffff;
+			border: 1px solid #d7e0eb;
+			border-radius: 8px;
+			box-shadow: 0 4px 12px rgba(18, 53, 91, 0.08);
+		}
+
+		.chart svg {
+			display: block;
+			width: 100%;
+			height: auto;
+		}
+
+		.axis-label {
+			font-size: 0.8rem;
+			font-weight: bold;
+			fill: #334155;
+		}
+
+		.dot {
+			fill: #e76f51;
+			stroke: #ffffff;
+			stroke-width: 1.5px;
+		}
+
+		.donut-slice {
+			stroke: #ffffff;
+			stroke-width: 2px;
+		}
+
+		.bar {
+			fill: #457b9d;
+		}
+
+		.line {
+			fill: none;
+			stroke: #264653;
+			stroke-width: 3px;
+		}
+
+		.line-point {
+			fill: #e76f51;
+			stroke: #ffffff;
+			stroke-width: 1.5px;
+		}
+
+		.legend {
+			font-size: 0.75rem;
+			fill: #334155;
+		}
+
+		@media (max-width: 700px) {
+			body {
+				padding: 1rem;
+			}
+
+			.chart-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+	</style>
+</head>
+<body>
+	<h1>Multi-Chart Dashboard</h1>
+
+	<main class="chart-grid">
+		<div id="chart1" class="chart"></div>
+		<div id="chart2" class="chart"></div>
+		<div id="chart3" class="chart"></div>
+		<div id="chart4" class="chart"></div>
+	</main>
+
+	<script src="https://d3js.org/d3.v7.min.js"></script>
+	<script>
+		Promise.all([
+			d3.csv("data/Ex5_ARE_Spot_Prices.csv"),
+			d3.csv("data/Ex5_TV_energy.csv"),
+			d3.csv("data/Ex5_TV_energy_55inchtv_byScreenType.csv"),
+			d3.csv("data/Ex5_TV_energy_Allsizes_byScreenType.csv")
+		]).then(([spotPrices, tvEnergy, tvEnergy55Inch, tvEnergyAllSizes]) => {
+			tvEnergy.forEach((row) => {
+				row.energy_consumpt = Number(row.energy_consumpt);
+				row.star2 = Number(row.star2);
+			});
+
+			drawTvEnergyScatter(tvEnergy);
+			drawScreenTypeDonut(tvEnergyAllSizes);
+			draw55InchBarChart(tvEnergy55Inch);
+			drawAveragePriceLine(spotPrices);
+
+			console.log("Datasets loaded:", {
+				spotPrices,
+				tvEnergy,
+				tvEnergy55Inch,
+				tvEnergyAllSizes
+			});
+		}).catch((error) => {
+			console.error("Error loading datasets:", error);
+		});
+
+		function drawTvEnergyScatter(data) {
+			const width = 560;
+			const height = 320;
+			const margin = { top: 35, right: 25, bottom: 55, left: 60 };
+			const chartWidth = width - margin.left - margin.right;
+			const chartHeight = height - margin.top - margin.bottom;
+
+			const svg = d3.select("#chart1")
+				.append("svg")
+				.attr("viewBox", `0 0 ${width} ${height}`)
+				.attr("role", "img")
+				.attr("aria-label", "Scatter plot of TV energy consumption and star rating");
+
+			const chart = svg.append("g")
+				.attr("transform", `translate(${margin.left},${margin.top})`);
+
+			const x = d3.scaleLinear()
+				.domain([0, d3.max(data, (row) => row.energy_consumpt)])
+				.nice()
+				.range([0, chartWidth]);
+
+			const y = d3.scaleLinear()
+				.domain(d3.extent(data, (row) => row.star2))
+				.nice()
+				.range([chartHeight, 0]);
+
+			svg.append("text")
+				.attr("x", width / 2)
+				.attr("y", 20)
+				.attr("text-anchor", "middle")
+				.attr("class", "axis-label")
+				.text("TV energy consumption vs star rating");
+
+			chart.append("g")
+				.attr("transform", `translate(0,${chartHeight})`)
+				.call(d3.axisBottom(x));
+
+			chart.append("g")
+				.call(d3.axisLeft(y));
+
+			chart.append("text")
+				.attr("class", "axis-label")
+				.attr("text-anchor", "middle")
+				.attr("x", chartWidth / 2)
+				.attr("y", chartHeight + 42)
+				.text("Energy consumption");
+
+			chart.append("text")
+				.attr("class", "axis-label")
+				.attr("text-anchor", "middle")
+				.attr("transform", "rotate(-90)")
+				.attr("x", -chartHeight / 2)
+				.attr("y", -42)
+				.text("Star rating");
+
+			chart.selectAll("circle")
+				.data(data)
+				.join("circle")
+				.attr("class", "dot")
+				.attr("cx", (row) => x(row.energy_consumpt))
+				.attr("cy", (row) => y(row.star2))
+				.attr("r", 4)
+				.append("title")
+				.text((row) => `${row.brand}: ${row.energy_consumpt} energy, ${row.star2} stars`);
+		}
+
+		function drawScreenTypeDonut(data) {
+			const width = 560;
+			const height = 320;
+			const radius = Math.min(width, height) / 2 - 45;
+			const color = d3.scaleOrdinal()
+				.domain(data.map((row) => row.Screen_Tech))
+				.range(["#2a9d8f", "#e9c46a", "#e76f51"]);
+
+			const svg = d3.select("#chart2")
+				.append("svg")
+				.attr("viewBox", `0 0 ${width} ${height}`)
+				.attr("role", "img")
+				.attr("aria-label", "Donut chart of mean TV energy consumption by screen type");
+
+			svg.append("text")
+				.attr("x", width / 2)
+				.attr("y", 25)
+				.attr("text-anchor", "middle")
+				.attr("class", "axis-label")
+				.text("Mean energy consumption by screen type");
+
+			const chart = svg.append("g")
+				.attr("transform", `translate(${width / 2 - 70},${height / 2 + 10})`);
+
+			const pie = d3.pie()
+				.value((row) => Number(row["Mean(Labelled energy consumption (kWh/year))"]));
+			const arc = d3.arc()
+				.innerRadius(radius * 0.55)
+				.outerRadius(radius);
+			const labelArc = d3.arc()
+				.innerRadius(radius * 0.78)
+				.outerRadius(radius * 0.78);
+
+			const slices = chart.selectAll("path")
+				.data(pie(data))
+				.join("path")
+				.attr("class", "donut-slice")
+				.attr("d", arc)
+				.attr("fill", (slice) => color(slice.data.Screen_Tech));
+
+			slices.append("title")
+				.text((slice) => `${slice.data.Screen_Tech}: ${Number(slice.data["Mean(Labelled energy consumption (kWh/year))"]).toFixed(1)} kWh/year`);
+
+			chart.selectAll(".donut-label")
+				.data(pie(data))
+				.join("text")
+				.attr("class", "legend")
+				.attr("transform", (slice) => `translate(${labelArc.centroid(slice)})`)
+				.attr("text-anchor", "middle")
+				.text((slice) => `${slice.data.Screen_Tech}`);
+
+			const legend = svg.append("g")
+				.attr("transform", `translate(${width - 125},${height / 2 - 35})`);
+
+			data.forEach((row, index) => {
+				const item = legend.append("g")
+					.attr("transform", `translate(0,${index * 24})`);
+
+				item.append("rect")
+					.attr("width", 12)
+					.attr("height", 12)
+					.attr("fill", color(row.Screen_Tech));
+
+				item.append("text")
+					.attr("class", "legend")
+					.attr("x", 18)
+					.attr("y", 10)
+					.text(row.Screen_Tech);
+			});
+		}
+
+		function draw55InchBarChart(data) {
+			const width = 560;
+			const height = 320;
+			const margin = { top: 40, right: 25, bottom: 55, left: 60 };
+			const chartWidth = width - margin.left - margin.right;
+			const chartHeight = height - margin.top - margin.bottom;
+			const valueKey = "Mean(Labelled energy consumption (kWh/year))";
+
+			const svg = d3.select("#chart3")
+				.append("svg")
+				.attr("viewBox", `0 0 ${width} ${height}`)
+				.attr("role", "img")
+				.attr("aria-label", "Bar chart of mean 55 inch TV energy consumption by screen type");
+
+			const chart = svg.append("g")
+				.attr("transform", `translate(${margin.left},${margin.top})`);
+
+			const x = d3.scaleBand()
+				.domain(data.map((row) => row.Screen_Tech))
+				.range([0, chartWidth])
+				.padding(0.3);
+
+			const y = d3.scaleLinear()
+				.domain([0, d3.max(data, (row) => Number(row[valueKey]))])
+				.nice()
+				.range([chartHeight, 0]);
+
+			svg.append("text")
+				.attr("x", width / 2)
+				.attr("y", 25)
+				.attr("text-anchor", "middle")
+				.attr("class", "axis-label")
+				.text("55-inch TV energy consumption by screen type");
+
+			chart.append("g")
+				.attr("transform", `translate(0,${chartHeight})`)
+				.call(d3.axisBottom(x));
+
+			chart.append("g")
+				.call(d3.axisLeft(y));
+
+			chart.append("text")
+				.attr("class", "axis-label")
+				.attr("text-anchor", "middle")
+				.attr("x", chartWidth / 2)
+				.attr("y", chartHeight + 42)
+				.text("Screen technology");
+
+			chart.append("text")
+				.attr("class", "axis-label")
+				.attr("text-anchor", "middle")
+				.attr("transform", "rotate(-90)")
+				.attr("x", -chartHeight / 2)
+				.attr("y", -42)
+				.text("Mean energy consumption (kWh/year)");
+
+			const bars = chart.selectAll(".bar")
+				.data(data)
+				.join("rect")
+				.attr("class", "bar")
+				.attr("x", (row) => x(row.Screen_Tech))
+				.attr("y", (row) => y(Number(row[valueKey])))
+				.attr("width", x.bandwidth())
+				.attr("height", (row) => chartHeight - y(Number(row[valueKey])));
+
+			bars.append("title")
+				.text((row) => `${row.Screen_Tech}: ${Number(row[valueKey]).toFixed(1)} kWh/year`);
+
+			chart.selectAll(".bar-value")
+				.data(data)
+				.join("text")
+				.attr("class", "legend")
+				.attr("text-anchor", "middle")
+				.attr("x", (row) => x(row.Screen_Tech) + x.bandwidth() / 2)
+				.attr("y", (row) => y(Number(row[valueKey])) - 6)
+				.text((row) => Number(row[valueKey]).toFixed(1));
+		}
+
+		function drawAveragePriceLine(data) {
+			const valueKey = "Average Price (notTas-Snowy)";
+			const chartData = data
+				.map((row) => ({
+					year: Number(row.Year),
+					price: Number(row[valueKey])
+				}))
+				.filter((row) => Number.isFinite(row.year) && Number.isFinite(row.price));
+			const width = 560;
+			const height = 320;
+			const margin = { top: 40, right: 25, bottom: 55, left: 60 };
+			const chartWidth = width - margin.left - margin.right;
+			const chartHeight = height - margin.top - margin.bottom;
+
+			const svg = d3.select("#chart4")
+				.append("svg")
+				.attr("viewBox", `0 0 ${width} ${height}`)
+				.attr("role", "img")
+				.attr("aria-label", "Line chart of average electricity spot price by year");
+
+			const chart = svg.append("g")
+				.attr("transform", `translate(${margin.left},${margin.top})`);
+
+			const x = d3.scaleLinear()
+				.domain(d3.extent(chartData, (row) => row.year))
+				.range([0, chartWidth]);
+
+			const y = d3.scaleLinear()
+				.domain([0, d3.max(chartData, (row) => row.price)])
+				.nice()
+				.range([chartHeight, 0]);
+
+			svg.append("text")
+				.attr("x", width / 2)
+				.attr("y", 25)
+				.attr("text-anchor", "middle")
+				.attr("class", "axis-label")
+				.text("Average electricity spot price by year");
+
+			chart.append("g")
+				.attr("transform", `translate(0,${chartHeight})`)
+				.call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
+			chart.append("g")
+				.call(d3.axisLeft(y));
+
+			chart.append("text")
+				.attr("class", "axis-label")
+				.attr("text-anchor", "middle")
+				.attr("x", chartWidth / 2)
+				.attr("y", chartHeight + 42)
+				.text("Year");
+
+			chart.append("text")
+				.attr("class", "axis-label")
+				.attr("text-anchor", "middle")
+				.attr("transform", "rotate(-90)")
+				.attr("x", -chartHeight / 2)
+				.attr("y", -42)
+				.text("Average price ($ per megawatt hour)");
+
+			chart.append("path")
+				.datum(chartData)
+				.attr("class", "line")
+				.attr("d", d3.line()
+					.x((row) => x(row.year))
+					.y((row) => y(row.price)));
+
+			chart.selectAll(".line-point")
+				.data(chartData)
+				.join("circle")
+				.attr("class", "line-point")
+				.attr("cx", (row) => x(row.year))
+				.attr("cy", (row) => y(row.price))
+				.attr("r", 3)
+				.append("title")
+				.text((row) => `${row.year}: $${row.price} per megawatt hour`);
+		}
+	</script>
+</body>
+</html>
